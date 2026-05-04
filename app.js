@@ -1,5 +1,8 @@
 const STORAGE_KEY = 'txtav_data_v1';
-const MODEL = 'claude-haiku-4-5-20251001';
+const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+const SYSTEM_PROMPT = 'Você é um assistente de roteiro audiovisual para vídeos de YouTube de um CEO falando para a câmera. Para cada trecho de fala, sugira UMA inserção audiovisual curta e prática (até 15 palavras). Pode ser corte para imagem, gráfico, texto na tela, B-roll, animação, etc. Responda APENAS com a sugestão, sem aspas e sem explicações.';
 
 let state = {
   rows: [],
@@ -10,11 +13,12 @@ let state = {
 let store = loadStore();
 
 function loadStore() {
+  const defaults = { projects: {}, apiKey: '', geminiKey: '', provider: 'gemini' };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : { projects: {}, apiKey: '' };
+    return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
   } catch {
-    return { projects: {}, apiKey: '' };
+    return defaults;
   }
 }
 
@@ -176,7 +180,9 @@ tbody.addEventListener('click', async e => {
 });
 
 async function suggestAI(i, btn) {
-  if (!store.apiKey) {
+  const provider = store.provider || 'gemini';
+  const key = provider === 'gemini' ? store.geminiKey : store.apiKey;
+  if (!key) {
     showToast('Configure a chave da API em ⚙ Configurações.');
     return;
   }
@@ -192,12 +198,14 @@ async function suggestAI(i, btn) {
 
   try {
     const fullScript = state.rows.map(r => r.text).filter(t => t && t.trim()).join('\n\n');
-    const suggestion = await callClaude(fullScript, row.text);
+    const suggestion = provider === 'gemini'
+      ? await callGemini(fullScript, row.text)
+      : await callClaude(fullScript, row.text);
     state.rows[i].insertion = suggestion;
     render();
   } catch (err) {
     console.error(err);
-    showToast('Erro: ' + (err.message || 'falha ao chamar a IA.'), 4000);
+    showToast('Erro: ' + (err.message || 'falha ao chamar a IA.'), 4500);
   } finally {
     btn.disabled = false;
     btn.textContent = original;
@@ -214,13 +222,10 @@ async function callClaude(fullScript, paragraph) {
       'anthropic-dangerous-direct-browser-access': 'true'
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: CLAUDE_MODEL,
       max_tokens: 80,
       system: [
-        {
-          type: 'text',
-          text: 'Você é um assistente de roteiro audiovisual para vídeos de YouTube de um CEO falando para a câmera. Para cada trecho de fala, sugira UMA inserção audiovisual curta e prática (até 15 palavras). Pode ser corte para imagem, gráfico, texto na tela, B-roll, animação, etc. Responda APENAS com a sugestão, sem aspas e sem explicações.'
-        },
+        { type: 'text', text: SYSTEM_PROMPT },
         {
           type: 'text',
           text: `Roteiro completo para contexto:\n\n${fullScript}`,
@@ -242,6 +247,31 @@ async function callClaude(fullScript, paragraph) {
   }
   const data = await res.json();
   return (data.content?.[0]?.text || '').trim() || '(sem resposta)';
+}
+
+async function callGemini(fullScript, paragraph) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(store.geminiKey)}`;
+  const userPrompt = `Roteiro completo para contexto:\n\n${fullScript}\n\n---\n\nTrecho específico:\n"${paragraph}"\n\nSugestão de inserção audiovisual:`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      generationConfig: { maxOutputTokens: 120, temperature: 0.7 }
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    let parsed = errText;
+    try { parsed = JSON.parse(errText).error?.message || errText; } catch {}
+    throw new Error(`HTTP ${res.status}: ${String(parsed).slice(0, 240)}`);
+  }
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).filter(Boolean).join('') || '';
+  return text.trim() || '(sem resposta)';
 }
 
 $('save-btn').addEventListener('click', () => {
@@ -305,12 +335,27 @@ function refreshProjectList() {
 }
 
 const settingsDialog = $('settings-dialog');
+
+function toggleProviderConfig() {
+  const p = $('provider').value;
+  $('gemini-config').hidden = p !== 'gemini';
+  $('claude-config').hidden = p !== 'claude';
+}
+
 $('settings-btn').addEventListener('click', () => {
+  $('provider').value = store.provider || 'gemini';
+  $('gemini-key').value = store.geminiKey || '';
   $('api-key').value = store.apiKey || '';
+  toggleProviderConfig();
   settingsDialog.showModal();
 });
+
+$('provider').addEventListener('change', toggleProviderConfig);
+
 settingsDialog.addEventListener('close', () => {
   if (settingsDialog.returnValue === 'save') {
+    store.provider = $('provider').value;
+    store.geminiKey = $('gemini-key').value.trim();
     store.apiKey = $('api-key').value.trim();
     saveStore();
     showToast('Configurações salvas.');

@@ -74,9 +74,27 @@
   <dialog id="settings-dialog">
     <form method="dialog">
       <h2>Configurações</h2>
-      <label for="api-key">Chave da API Claude (Anthropic)</label>
-      <input type="password" id="api-key" placeholder="sk-ant-...">
-      <p class="hint">Obtida em <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>. A chave é salva apenas no seu navegador (localStorage), nunca enviada para outros servidores.</p>
+
+      <label for="provider">Provedor de IA</label>
+      <select id="provider">
+        <option value="gemini">Google Gemini (gratuito)</option>
+        <option value="claude">Anthropic Claude (pago)</option>
+      </select>
+
+      <div id="gemini-config">
+        <label for="gemini-key">Chave da API Gemini</label>
+        <input type="password" id="gemini-key" placeholder="AIza...">
+        <p class="hint">Gere de graça em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (basta uma conta Google, sem cartão). Tier gratuito: 1.500 chamadas/dia no modelo Flash.</p>
+      </div>
+
+      <div id="claude-config" hidden>
+        <label for="api-key">Chave da API Claude</label>
+        <input type="password" id="api-key" placeholder="sk-ant-...">
+        <p class="hint">Obtida em <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>. Requer crédito pago.</p>
+      </div>
+
+      <p class="hint">As chaves são salvas apenas no seu navegador (localStorage), nunca enviadas para outros servidores.</p>
+
       <div class="btn-group right">
         <button value="cancel">Cancelar</button>
         <button value="save" class="primary">Salvar</button>
