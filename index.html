@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TXT&gt;AV</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>TXT&gt;AV</h1>
+    <button id="settings-btn" class="icon-btn" title="Configurações">⚙ Configurações</button>
+  </header>
+
+  <main>
+    <section id="input-section">
+      <div class="grid">
+        <div class="col-text">
+          <label for="script-input">Texto do roteiro</label>
+          <textarea id="script-input" placeholder="Cole aqui o texto do roteiro.&#10;&#10;Separe parágrafos com uma linha em branco — cada parágrafo vira uma linha da tabela."></textarea>
+        </div>
+        <aside class="col-options">
+          <label for="project-name">Nome do projeto</label>
+          <input type="text" id="project-name" placeholder="Sem título">
+
+          <label for="wpm">Taxa de leitura (palavras/min)</label>
+          <input type="number" id="wpm" value="150" min="50" max="300">
+
+          <label for="project-load">Carregar projeto salvo</label>
+          <select id="project-load">
+            <option value="">— selecionar —</option>
+          </select>
+
+          <div class="btn-group">
+            <button id="save-btn">Salvar</button>
+            <button id="new-btn">Novo</button>
+            <button id="delete-project-btn" class="danger">Apagar</button>
+          </div>
+
+          <button id="convert-btn" class="primary">Converter ▸</button>
+        </aside>
+      </div>
+    </section>
+
+    <section id="table-section" hidden>
+      <div class="table-actions">
+        <span class="muted" id="row-count"></span>
+        <div class="export-group">
+          <button id="export-doc">Exportar DOC</button>
+          <button id="export-xlsx">Exportar XLSX</button>
+          <button id="export-pdf">Exportar PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="av-table">
+          <thead>
+            <tr>
+              <th class="col-ts">Timestamp</th>
+              <th class="col-text-cell">Fala</th>
+              <th class="col-num">#</th>
+              <th class="col-insertion">Inserção audiovisual</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="av-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="settings-dialog">
+    <form method="dialog">
+      <h2>Configurações</h2>
+      <label for="api-key">Chave da API Claude (Anthropic)</label>
+      <input type="password" id="api-key" placeholder="sk-ant-...">
+      <p class="hint">Obtida em <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>. A chave é salva apenas no seu navegador (localStorage), nunca enviada para outros servidores.</p>
+      <div class="btn-group right">
+        <button value="cancel">Cancelar</button>
+        <button value="save" class="primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
