@@ -191,6 +191,21 @@ td.cell-num { text-align: center; font-weight: 700; color: #0071e3; }
   color: #aaa;
   font-style: italic;
 }
+.editable a {
+  color: #0071e3;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.editable a:hover { color: #0077ed; }
+
+dialog code {
+  background: #f0f0f0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+}
 
 .row-actions {
   display: flex;

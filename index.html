@@ -102,6 +102,20 @@
     </form>
   </dialog>
 
+  <dialog id="link-dialog">
+    <form method="dialog">
+      <h2>Inserir / editar link</h2>
+      <label for="link-url">URL</label>
+      <input type="text" id="link-url" placeholder="https://exemplo.com">
+      <p class="hint">Enter pra aplicar, Esc pra cancelar. Se digitar sem <code>https://</code>, é adicionado automaticamente.</p>
+      <div class="btn-group right">
+        <button type="button" id="link-remove" class="danger" hidden>Remover link</button>
+        <button type="button" id="link-cancel">Cancelar</button>
+        <button type="submit" value="save" class="primary">Aplicar</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast"></div>
 
   <script src="app.js"></script>

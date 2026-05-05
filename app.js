@@ -43,8 +43,54 @@ function showToast(msg, ms = 2400) {
   showToast._t = setTimeout(() => toast.classList.remove('show'), ms);
 }
 
-function countWords(text) {
-  return text.trim().split(/\s+/).filter(Boolean).length;
+function htmlToPlainText(html) {
+  if (!html) return '';
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  div.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  return div.textContent || '';
+}
+
+function htmlToPlainTextWithUrls(html) {
+  if (!html) return '';
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  div.querySelectorAll('a').forEach(a => {
+    const text = a.textContent;
+    const href = a.getAttribute('href') || '';
+    if (href && text && text.trim() !== href.trim()) {
+      a.replaceWith(document.createTextNode(`${text} (${href})`));
+    } else if (href) {
+      a.replaceWith(document.createTextNode(href));
+    }
+  });
+  div.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  return div.textContent || '';
+}
+
+function htmlForDoc(html) {
+  if (!html) return '';
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  div.querySelectorAll('a').forEach(a => {
+    if (!a.target) a.setAttribute('target', '_blank');
+    if (!a.rel) a.setAttribute('rel', 'noopener');
+  });
+  return div.innerHTML;
+}
+
+function ensureHtml(s) {
+  if (!s) return '';
+  if (/<[a-z][^>]*>/i.test(s)) return s;
+  return escapeHtml(s).replace(/\n/g, '<br>');
+}
+
+function plainToHtml(text) {
+  return escapeHtml(text || '').replace(/\n/g, '<br>');
+}
+
+function countWords(html) {
+  return htmlToPlainText(html).trim().split(/\s+/).filter(Boolean).length;
 }
 
 function formatTimestamp(seconds) {
@@ -66,7 +112,7 @@ function convert() {
 
   const wpm = parseInt(wpmInput.value, 10) || 150;
 
-  const hasInsertions = state.rows.some(r => r.insertion && r.insertion.trim());
+  const hasInsertions = state.rows.some(r => htmlToPlainText(r.insertion).trim());
   if (hasInsertions && !confirm('Já existem inserções preenchidas. Converter de novo vai descartá-las. Continuar?')) {
     return;
   }
@@ -74,7 +120,7 @@ function convert() {
   const paragraphs = parseParagraphs(text);
   state.script = text;
   state.wpm = wpm;
-  state.rows = paragraphs.map(p => ({ text: p, insertion: '' }));
+  state.rows = paragraphs.map(p => ({ text: plainToHtml(p), insertion: '' }));
 
   render();
   showToast(`${paragraphs.length} parágrafo${paragraphs.length === 1 ? '' : 's'} convertido${paragraphs.length === 1 ? '' : 's'}.`);
@@ -92,7 +138,7 @@ function computeRowMeta() {
     cumSeconds += duration;
 
     let insertionNumber = '';
-    if (row.insertion && row.insertion.trim()) {
+    if (htmlToPlainText(row.insertion).trim()) {
       insertionCount++;
       insertionNumber = insertionCount;
     }
@@ -126,8 +172,8 @@ function render() {
         </div>
       </td>
     `;
-    tr.querySelector('[data-field=text]').textContent = row.text;
-    tr.querySelector('[data-field=insertion]').textContent = row.insertion;
+    tr.querySelector('[data-field=text]').innerHTML = row.text || '';
+    tr.querySelector('[data-field=insertion]').innerHTML = row.insertion || '';
     tbody.appendChild(tr);
   });
 }
@@ -148,7 +194,7 @@ tbody.addEventListener('input', e => {
   const i = parseInt(el.dataset.i, 10);
   const field = el.dataset.field;
   if (!state.rows[i]) return;
-  state.rows[i][field] = el.textContent;
+  state.rows[i][field] = el.innerHTML;
   refreshMetaInDom();
 });
 
@@ -187,7 +233,8 @@ async function suggestAI(i, btn) {
     return;
   }
   const row = state.rows[i];
-  if (!row || !row.text.trim()) {
+  const rowPlain = htmlToPlainText(row && row.text);
+  if (!row || !rowPlain.trim()) {
     showToast('Linha sem texto. Escreva um trecho de fala primeiro.');
     return;
   }
@@ -197,11 +244,14 @@ async function suggestAI(i, btn) {
   btn.textContent = '…';
 
   try {
-    const fullScript = state.rows.map(r => r.text).filter(t => t && t.trim()).join('\n\n');
+    const fullScript = state.rows
+      .map(r => htmlToPlainText(r.text))
+      .filter(t => t && t.trim())
+      .join('\n\n');
     const suggestion = provider === 'gemini'
-      ? await callGemini(fullScript, row.text)
-      : await callClaude(fullScript, row.text);
-    state.rows[i].insertion = suggestion;
+      ? await callGemini(fullScript, rowPlain)
+      : await callClaude(fullScript, rowPlain);
+    state.rows[i].insertion = plainToHtml(suggestion);
     render();
   } catch (err) {
     console.error(err);
@@ -305,7 +355,10 @@ projectLoad.addEventListener('change', () => {
   wpmInput.value = p.wpm || 150;
   projectNameInput.value = name;
   state = {
-    rows: (p.rows || []).map(r => ({ text: r.text || '', insertion: r.insertion || '' })),
+    rows: (p.rows || []).map(r => ({
+      text: ensureHtml(r.text || ''),
+      insertion: ensureHtml(r.insertion || '')
+    })),
     script: p.script || '',
     wpm: p.wpm || 150
   };
@@ -395,7 +448,12 @@ $('export-xlsx').addEventListener('click', () => {
   const rows = buildExportRows();
   const ws = XLSX.utils.aoa_to_sheet([
     ['Timestamp', 'Fala', '#', 'Inserção audiovisual'],
-    ...rows.map(r => [r.timestamp, r.text, r.num, r.insertion])
+    ...rows.map(r => [
+      r.timestamp,
+      htmlToPlainTextWithUrls(r.text),
+      r.num,
+      htmlToPlainTextWithUrls(r.insertion)
+    ])
   ]);
   ws['!cols'] = [{ wch: 10 }, { wch: 60 }, { wch: 5 }, { wch: 50 }];
   const wb = XLSX.utils.book_new();
@@ -413,7 +471,12 @@ $('export-pdf').addEventListener('click', () => {
   doc.autoTable({
     startY: 20,
     head: [['Timestamp', 'Fala', '#', 'Inserção audiovisual']],
-    body: rows.map(r => [r.timestamp, r.text, String(r.num), r.insertion]),
+    body: rows.map(r => [
+      r.timestamp,
+      htmlToPlainTextWithUrls(r.text),
+      String(r.num),
+      htmlToPlainTextWithUrls(r.insertion)
+    ]),
     styles: { fontSize: 9, cellPadding: 3, valign: 'top', overflow: 'linebreak' },
     headStyles: { fillColor: [29, 29, 31] },
     columnStyles: {
@@ -436,7 +499,7 @@ $('export-doc').addEventListener('click', () => {
 <th style="width:90px;">Timestamp</th><th>Fala</th><th style="width:40px;">#</th><th>Inserção audiovisual</th>
 </tr></thead>
 <tbody>
-${rows.map(r => `<tr><td>${escapeHtml(r.timestamp)}</td><td>${escapeHtml(r.text)}</td><td style="text-align:center;">${escapeHtml(r.num)}</td><td>${escapeHtml(r.insertion)}</td></tr>`).join('')}
+${rows.map(r => `<tr><td>${escapeHtml(r.timestamp)}</td><td>${htmlForDoc(r.text)}</td><td style="text-align:center;">${escapeHtml(r.num)}</td><td>${htmlForDoc(r.insertion)}</td></tr>`).join('')}
 </tbody>
 </table>
 </body></html>`;
@@ -449,6 +512,99 @@ ${rows.map(r => `<tr><td>${escapeHtml(r.timestamp)}</td><td>${escapeHtml(r.text)
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+// --- Link dialog (Ctrl+K) ---
+const linkDialog = $('link-dialog');
+const linkUrl = $('link-url');
+const linkRemove = $('link-remove');
+let savedRange = null;
+let savedEditable = null;
+
+function findLinkInRange(range) {
+  const start = range.startContainer;
+  const startEl = start.nodeType === 1 ? start : start.parentElement;
+  return startEl ? startEl.closest('a') : null;
+}
+
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k') return;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const node = sel.anchorNode;
+  if (!node) return;
+  const startEl = node.nodeType === 1 ? node : node.parentElement;
+  if (!startEl) return;
+  const editable = startEl.closest('.editable');
+  if (!editable) return;
+
+  e.preventDefault();
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) {
+    showToast('Selecione o texto antes de aplicar Ctrl+K.');
+    return;
+  }
+  savedRange = range.cloneRange();
+  savedEditable = editable;
+
+  const existing = findLinkInRange(range);
+  linkUrl.value = existing ? existing.getAttribute('href') || '' : '';
+  linkRemove.hidden = !existing;
+
+  linkDialog.showModal();
+  setTimeout(() => { linkUrl.focus(); linkUrl.select(); }, 30);
+});
+
+linkUrl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    linkDialog.close('save');
+  }
+});
+
+$('link-cancel').addEventListener('click', () => linkDialog.close('cancel'));
+linkRemove.addEventListener('click', () => linkDialog.close('remove'));
+
+linkDialog.addEventListener('close', () => {
+  const action = linkDialog.returnValue;
+  if (!savedRange || !savedEditable || (action !== 'save' && action !== 'remove')) {
+    savedRange = null; savedEditable = null;
+    return;
+  }
+
+  // Restaura a seleção dentro do contenteditable
+  savedEditable.focus();
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(savedRange);
+
+  if (action === 'remove') {
+    document.execCommand('unlink');
+  } else {
+    let url = linkUrl.value.trim();
+    if (!url) {
+      document.execCommand('unlink');
+    } else {
+      if (!/^(https?:|mailto:|tel:|#|\/)/i.test(url)) {
+        url = 'https://' + url;
+      }
+      document.execCommand('createLink', false, url);
+      savedEditable.querySelectorAll('a').forEach(a => {
+        if (!a.target) a.setAttribute('target', '_blank');
+        if (!a.rel) a.setAttribute('rel', 'noopener');
+      });
+    }
+  }
+
+  // Persiste no state
+  const i = parseInt(savedEditable.dataset.i, 10);
+  const field = savedEditable.dataset.field;
+  if (state.rows[i]) {
+    state.rows[i][field] = savedEditable.innerHTML;
+  }
+
+  savedRange = null;
+  savedEditable = null;
 });
 
 refreshProjectList();
